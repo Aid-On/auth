@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(tsc)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run dev:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "Bash(sed:*)",
+      "Bash(npx wrangler pages dev:*)",
+      "Bash(npx wrangler d1 migrations apply:*)",
+      "Bash(npm run wrangler:local:*)",
+      "Bash(npm run deploy:dev:*)",
+      "WebFetch(domain:dev.fastllmchat.aid-on.org)",
+      "Bash(npm run deploy:stg:*)",
+      "Bash(npm run deploy:prod:*)",
+      "Bash(pkill:*)",
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(git stash:*)",
+      "Bash(mkdir:*)"
+    ],
+    "additionalDirectories": [
+      "/Users/o6lvl4/workspace/github.com/Aid-On/aid-on-platform/products/fast-llm-chat-app",
+      "/Users/o6lvl4/workspace/github.com/Aid-On/aid-on-platform"
+    ]
+  }
+}

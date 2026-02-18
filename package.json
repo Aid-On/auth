@@ -1,0 +1,63 @@
+{
+  "name": "@aid-on/auth",
+  "version": "1.0.0",
+  "description": "Edge-native authentication with Fluent API. Sessions, OAuth, Guests, Audit logs. Zero Node.js dependencies.",
+  "exports": {
+    ".": {
+      "types": "./dist/session/index.d.ts",
+      "import": "./dist/session/index.js",
+      "default": "./dist/session/index.js"
+    },
+    "./session": {
+      "types": "./dist/session/index.d.ts",
+      "import": "./dist/session/index.js",
+      "default": "./dist/session/index.js"
+    },
+    "./guest": {
+      "types": "./dist/guest/index.d.ts",
+      "import": "./dist/guest/index.js",
+      "default": "./dist/guest/index.js"
+    },
+    "./oauth": {
+      "types": "./dist/oauth/index.d.ts",
+      "import": "./dist/oauth/index.js",
+      "default": "./dist/oauth/index.js"
+    },
+    "./audit": {
+      "types": "./dist/audit/index.d.ts",
+      "import": "./dist/audit/index.js",
+      "default": "./dist/audit/index.js"
+    },
+    "./access": {
+      "types": "./dist/cloudflare-access/index.d.ts",
+      "import": "./dist/cloudflare-access/index.js",
+      "default": "./dist/cloudflare-access/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "edge-auth",
+    "fluent-api",
+    "session-management",
+    "oauth",
+    "guest-users",
+    "audit-log",
+    "web-crypto"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "happy-dom": "^20.0.11",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}
