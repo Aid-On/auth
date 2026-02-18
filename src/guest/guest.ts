@@ -63,7 +63,9 @@ export class GuestBuilder {
   private secret?: string;
   private cookieName: string = 'session';
 
-  private constructor() {}
+  private constructor() {
+    // private: use GuestBuilder.create() instead
+  }
 
   static create(): GuestBuilder {
     return new GuestBuilder();

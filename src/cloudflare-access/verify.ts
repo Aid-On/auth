@@ -1,48 +1,24 @@
-/**
- * Cloudflare Access JWT Verification
- *
- * Verifies Cloudflare Access JWTs by:
- * 1. Extracting JWT from CF-Access-JWT-Assertion header
- * 2. Optionally verifying RS256 signature against Cloudflare's JWKS
- * 3. Validating claims (iss, aud, exp)
- */
-
+/** Cloudflare Access JWT Verification */
 import type {
-  CloudflareAccessPayload,
-  JWTHeader,
-  JWK,
-  JWKSResponse,
-  VerifyAccessOptions,
-  VerifyAccessResult,
-  AccessUser,
-  AccessAuthContext,
+  CloudflareAccessPayload, JWTHeader, JWK, JWKSResponse,
+  VerifyAccessOptions, VerifyAccessResult, AccessUser, AccessAuthContext,
 } from './types';
 import { decodeBase64Url } from '../utils/base64';
 
-// Default cache duration: 60 minutes
 const DEFAULT_CACHE_DURATION_MS = 60 * 60 * 1000;
-
-// JWKS cache per team domain
 const jwksCache = new Map<string, { data: JWKSResponse; expiry: number }>();
 
-/**
- * Extract JWT from CF-Access-JWT-Assertion header
- */
+/** Extract JWT from CF-Access-JWT-Assertion header */
 export function extractAccessToken(request: Request): string | null {
   return request.headers.get('CF-Access-JWT-Assertion');
 }
 
-/**
- * Base64URL decode to string (Unicode-safe wrapper)
- */
+/** Base64URL decode to string (Unicode-safe wrapper) */
 function base64UrlDecode(str: string): string {
-  // JWT tokens typically don't have Unicode in headers/signatures,
-  // but payload might contain Unicode characters in claims
   try {
     return decodeBase64Url(str);
-  } catch (e) {
-    // Fallback to non-Unicode decoding for backward compatibility
-    // (JWT headers and signatures are usually ASCII-only)
+  } catch (_decodeError) {
+    // Fallback for ASCII-only JWT headers/signatures
     let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
     const pad = base64.length % 4;
     if (pad && pad !== 1) {
@@ -52,9 +28,7 @@ function base64UrlDecode(str: string): string {
   }
 }
 
-/**
- * Base64URL decode to Uint8Array
- */
+/** Base64URL decode to Uint8Array */
 function base64UrlDecodeToUint8Array(str: string): Uint8Array {
   const decoded = base64UrlDecode(str);
   const bytes = new Uint8Array(decoded.length);
@@ -64,9 +38,7 @@ function base64UrlDecodeToUint8Array(str: string): Uint8Array {
   return bytes;
 }
 
-/**
- * Decode JWT without verification
- */
+/** Decode JWT without verification */
 export function decodeAccessToken(token: string): {
   header: JWTHeader;
   payload: CloudflareAccessPayload;
@@ -82,9 +54,7 @@ export function decodeAccessToken(token: string): {
   return { header, payload };
 }
 
-/**
- * Fetch Cloudflare Access JWKS
- */
+/** Fetch Cloudflare Access JWKS */
 async function fetchAccessJWKS(
   teamDomain: string,
   cacheDurationMs: number = DEFAULT_CACHE_DURATION_MS
@@ -113,9 +83,7 @@ async function fetchAccessJWKS(
   return jwks;
 }
 
-/**
- * Import JWK as CryptoKey
- */
+/** Import JWK as CryptoKey */
 async function importJWK(jwk: JWK): Promise<CryptoKey> {
   return await crypto.subtle.importKey(
     'jwk',
@@ -135,9 +103,7 @@ async function importJWK(jwk: JWK): Promise<CryptoKey> {
   );
 }
 
-/**
- * Verify JWT signature
- */
+/** Verify JWT signature */
 async function verifySignature(
   token: string,
   publicKey: CryptoKey
@@ -158,6 +124,31 @@ async function verifySignature(
     signatureBytes as unknown as BufferSource,
     signedDataBytes as unknown as BufferSource
   );
+}
+
+/** Validate JWT claims. Returns error message if invalid, null if valid. */
+function validateClaims(
+  payload: CloudflareAccessPayload,
+  teamDomain: string,
+  audience?: string | string[]
+): string | null {
+  const now = Math.floor(Date.now() / 1000);
+
+  if (payload.exp < now) return 'Token expired';
+  if (payload.nbf && payload.nbf > now) return 'Token not yet valid';
+
+  const expectedIssuer = `https://${teamDomain}.cloudflareaccess.com`;
+  if (payload.iss !== expectedIssuer) return `Invalid issuer: ${payload.iss}`;
+
+  if (audience) {
+    const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    const expectedAud = Array.isArray(audience) ? audience : [audience];
+    if (!expectedAud.some((aud) => tokenAud.includes(aud))) return 'Invalid audience';
+  }
+
+  if (!payload.email || !payload.sub) return 'Missing required fields (email, sub)';
+
+  return null;
 }
 
 /**
@@ -213,38 +204,9 @@ export async function verifyAccessToken(
     }
 
     // Validate claims
-    const now = Math.floor(Date.now() / 1000);
-
-    // Expiration check
-    if (payload.exp < now) {
-      return { success: false, error: 'Token expired' };
-    }
-
-    // Not before check
-    if (payload.nbf && payload.nbf > now) {
-      return { success: false, error: 'Token not yet valid' };
-    }
-
-    // Issuer check
-    const expectedIssuer = `https://${teamDomain}.cloudflareaccess.com`;
-    if (payload.iss !== expectedIssuer) {
-      return { success: false, error: `Invalid issuer: ${payload.iss}` };
-    }
-
-    // Audience check (if specified)
-    if (audience) {
-      const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-      const expectedAud = Array.isArray(audience) ? audience : [audience];
-      const hasValidAud = expectedAud.some((aud) => tokenAud.includes(aud));
-
-      if (!hasValidAud) {
-        return { success: false, error: 'Invalid audience' };
-      }
-    }
-
-    // Required fields check
-    if (!payload.email || !payload.sub) {
-      return { success: false, error: 'Missing required fields (email, sub)' };
+    const claimsError = validateClaims(payload, teamDomain, audience);
+    if (claimsError) {
+      return { success: false, error: claimsError };
     }
 
     return { success: true, payload };
@@ -256,9 +218,7 @@ export async function verifyAccessToken(
   }
 }
 
-/**
- * Extract user information from Cloudflare Access payload
- */
+/** Extract user information from Cloudflare Access payload */
 export function extractAccessUser(payload: CloudflareAccessPayload): AccessUser {
   return {
     id: payload.sub,
@@ -267,21 +227,7 @@ export function extractAccessUser(payload: CloudflareAccessPayload): AccessUser 
   };
 }
 
-/**
- * Get authentication context from request
- *
- * @example
- * ```typescript
- * const auth = await getAccessAuthContext(request, {
- *   teamDomain: 'myteam',
- *   allowDevBypass: true,
- * });
- *
- * if (auth.isAuthenticated) {
- *   console.log('User:', auth.user!.email);
- * }
- * ```
- */
+/** Get authentication context from request */
 export async function getAccessAuthContext(
   request: Request,
   options: VerifyAccessOptions & { allowDevBypass?: boolean }

@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { SessionBuilder, SessionVerifier } from '../session/session';
+import type { SessionPayload } from '../session/types';
 
 describe('Unicode Support', () => {
   const SECRET = 'test-secret-key';
@@ -55,10 +56,10 @@ describe('Unicode Support', () => {
         id: 'user-789',
         email: 'mixed@example.com',
         name: '山田さん 🌸 (Yamada-san)',
-        // Custom fields are supported in SessionPayload
+        // Custom fields are supported in SessionPayload via index signature
         description: '春の桜が綺麗ですね 🌸🌸🌸',
         location: '東京都渋谷区',
-      } as any)
+      } as SessionPayload)
       .withSecret(SECRET)
       .build();
 

@@ -29,16 +29,16 @@ export function encodeBase64Url(str: string): string {
  */
 export function decodeBase64Url(str: string): string {
   // Convert Base64URL to standard Base64
-  str = str.replace(/-/g, "+").replace(/_/g, "/");
-  
+  let base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+
   // Add padding if necessary
-  const pad = str.length % 4;
+  const pad = base64.length % 4;
   if (pad) {
-    str += "=".repeat(4 - pad);
+    base64 += "=".repeat(4 - pad);
   }
-  
+
   // Decode Base64 to binary string
-  const binString = atob(str);
+  const binString = atob(base64);
   
   // Convert binary string to Uint8Array
   const bytes = Uint8Array.from(binString, (c) => c.charCodeAt(0));

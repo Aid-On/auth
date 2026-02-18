@@ -6,7 +6,6 @@ import {
   extractAccessToken,
   verifyAccessToken,
   extractAccessUser,
-  getAccessAuthContext,
 } from './verify';
 import type {
   CloudflareAccessPayload,
@@ -15,28 +14,38 @@ import type {
   AccessGuardResult,
 } from './types';
 
+/** Create a JSON error response */
+function errorResult(message: string, status: number): AccessGuardResult {
+  return {
+    success: false,
+    errorResponse: new Response(
+      JSON.stringify({ error: message }),
+      { status, headers: { 'Content-Type': 'application/json' } }
+    ),
+  };
+}
+
+/** Check if request is from localhost for dev bypass */
+function isLocalhost(request: Request): boolean {
+  const url = new URL(request.url);
+  return url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+}
+
+/** Check if email domain is in the allowed list */
+function isDomainAllowed(email: string, allowedDomains: string[]): boolean {
+  const domain = email.split('@')[1];
+  return allowedDomains.includes(domain);
+}
+
 /**
  * Authentication guard for Cloudflare Pages Functions
  *
  * @example
  * ```typescript
- * import { accessGuard } from '@aid-on/gauth/cloudflare-access';
- *
- * export const onRequestGet: PagesFunction<Env> = async (context) => {
- *   const auth = await accessGuard(context.request, context.env, {
- *     getTeamDomain: (env) => env.CF_ACCESS_TEAM_DOMAIN,
- *     getAudience: (env) => env.CF_ACCESS_AUD,
- *     allowedDomains: ['aid-on.org'],
- *     allowDevBypass: true,
- *   });
- *
- *   if (!auth.success) {
- *     return auth.errorResponse!;
- *   }
- *
- *   // User is authenticated
- *   console.log('User:', auth.user!.email);
- * };
+ * const auth = await accessGuard(request, env, {
+ *   getTeamDomain: (env) => env.CF_ACCESS_TEAM_DOMAIN,
+ *   allowedDomains: ['aid-on.org'],
+ * });
  * ```
  */
 export async function accessGuard<Env = unknown>(
@@ -52,96 +61,40 @@ export async function accessGuard<Env = unknown>(
     allowDevBypass = false,
   } = options;
 
-  // Dev bypass check
-  if (allowDevBypass) {
-    const url = new URL(request.url);
-    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-      const devUser: AccessUser = {
-        id: 'dev-user-001',
-        email: 'dev@example.com',
-        name: 'Dev User',
-      };
-      return { success: true, user: devUser };
-    }
+  if (allowDevBypass && isLocalhost(request)) {
+    const devUser: AccessUser = {
+      id: 'dev-user-001',
+      email: 'dev@example.com',
+      name: 'Dev User',
+    };
+    return { success: true, user: devUser };
   }
 
-  // Extract token
   const token = extractAccessToken(request);
   if (!token) {
-    return {
-      success: false,
-      errorResponse: new Response(
-        JSON.stringify({ error: 'Unauthorized: No access token provided' }),
-        {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      ),
-    };
+    return errorResult('Unauthorized: No access token provided', 401);
   }
 
-  // Get options from env
   const teamDomain = getTeamDomain(env);
   if (!teamDomain) {
-    return {
-      success: false,
-      errorResponse: new Response(
-        JSON.stringify({ error: 'Server configuration error: Missing team domain' }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      ),
-    };
+    return errorResult('Server configuration error: Missing team domain', 500);
   }
 
   const audience = getAudience?.(env);
-
-  // Verify token
-  const result = await verifyAccessToken(token, {
-    teamDomain,
-    audience,
-    verifySignature,
-  });
+  const result = await verifyAccessToken(token, { teamDomain, audience, verifySignature });
 
   if (!result.success || !result.payload) {
-    return {
-      success: false,
-      errorResponse: new Response(
-        JSON.stringify({ error: `Unauthorized: ${result.error || 'Invalid token'}` }),
-        {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      ),
-    };
+    return errorResult(`Unauthorized: ${result.error || 'Invalid token'}`, 401);
   }
 
-  // Domain restriction check
   if (allowedDomains && allowedDomains.length > 0) {
-    const email = result.payload.email;
-    const domain = email.split('@')[1];
-    if (!allowedDomains.includes(domain)) {
-      return {
-        success: false,
-        errorResponse: new Response(
-          JSON.stringify({ error: 'Forbidden: Email domain not allowed' }),
-          {
-            status: 403,
-            headers: { 'Content-Type': 'application/json' },
-          }
-        ),
-      };
+    if (!isDomainAllowed(result.payload.email, allowedDomains)) {
+      return errorResult('Forbidden: Email domain not allowed', 403);
     }
   }
 
   const user = extractAccessUser(result.payload);
-
-  return {
-    success: true,
-    user,
-    payload: result.payload,
-  };
+  return { success: true, user, payload: result.payload };
 }
 
 /**
@@ -178,9 +131,16 @@ export async function requireAccessAuth<Env = unknown>(
     throw result.errorResponse;
   }
 
+  if (!result.user || !result.payload) {
+    throw new Response(
+      JSON.stringify({ error: 'Unexpected: missing user or payload after successful guard' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
   return {
-    user: result.user!,
-    payload: result.payload!,
+    user: result.user,
+    payload: result.payload,
   };
 }
 
@@ -205,7 +165,7 @@ export async function requireAccessAuth<Env = unknown>(
  * };
  * ```
  */
-export { getAccessAuthContext as getAuthContext };
+export { getAccessAuthContext as getAuthContext } from './verify';
 
 /**
  * Error class for authentication failures

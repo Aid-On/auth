@@ -22,12 +22,9 @@
  * ```
  */
 
-import type { 
-  OAuthConfig, 
+import type {
+  OAuthConfig,
   OAuthProviderConfig,
-  OAuthTokenResponse, 
-  OAuthUserInfo, 
-  OAuthCallbackResult 
 } from './types';
 
 /**
@@ -48,11 +45,7 @@ export const OAUTH_PROVIDERS = {
   },
 } as const;
 
-type BuiltInProvider = keyof typeof OAUTH_PROVIDERS;
-
-/**
- * Fluent OAuth Authorization Flow Builder
- */
+/** Fluent OAuth Authorization Flow Builder */
 export class OAuthFlow {
   private providerConfig: OAuthProviderConfig;
   private config: Partial<OAuthConfig> = {};
@@ -183,184 +176,5 @@ export class OAuthFlow {
   }
 }
 
-/**
- * Fluent OAuth Callback Handler
- */
-export class OAuthCallback {
-  private providerConfig: OAuthProviderConfig;
-  private config: Partial<OAuthConfig> = {};
-  private code?: string;
-  private error?: string;
-  private errorDescription?: string;
-
-  private constructor(providerConfig: OAuthProviderConfig) {
-    this.providerConfig = providerConfig;
-  }
-
-  static google(): OAuthCallback {
-    return new OAuthCallback(OAUTH_PROVIDERS.google);
-  }
-
-  static github(): OAuthCallback {
-    return new OAuthCallback(OAUTH_PROVIDERS.github);
-  }
-
-  static custom(config: OAuthProviderConfig): OAuthCallback {
-    return new OAuthCallback(config);
-  }
-
-  /**
-   * Parse callback from URL with a specific provider
-   */
-  static fromUrl(url: URL | string, providerOrConfig: BuiltInProvider | OAuthProviderConfig = 'google'): OAuthCallback {
-    const urlObj = typeof url === 'string' ? new URL(url) : url;
-    const config = typeof providerOrConfig === 'string' 
-      ? OAUTH_PROVIDERS[providerOrConfig]
-      : providerOrConfig;
-    
-    const callback = new OAuthCallback(config);
-    
-    const code = urlObj.searchParams.get('code');
-    const error = urlObj.searchParams.get('error');
-    const errorDescription = urlObj.searchParams.get('error_description');
-    
-    if (code) callback.code = code;
-    if (error) callback.error = error;
-    if (errorDescription) callback.errorDescription = errorDescription;
-    
-    return callback;
-  }
-
-  /**
-   * Set client ID
-   */
-  withClientId(clientId: string): this {
-    this.config.clientId = clientId;
-    return this;
-  }
-
-  /**
-   * Set client secret
-   */
-  withClientSecret(clientSecret: string): this {
-    this.config.clientSecret = clientSecret;
-    return this;
-  }
-
-  /**
-   * Set authorization code
-   */
-  withCode(code: string): this {
-    this.code = code;
-    return this;
-  }
-
-  /**
-   * Set redirect URI (must match the one used in auth flow)
-   */
-  withRedirectUri(uri: string): this {
-    this.config.redirectUri = uri;
-    return this;
-  }
-
-  /**
-   * Exchange authorization code for tokens
-   */
-  async exchange(): Promise<OAuthCallbackResult> {
-    // Check for errors first
-    if (this.error) {
-      return {
-        success: false,
-        error: this.error,
-        errorDescription: this.errorDescription,
-      };
-    }
-
-    if (!this.code) {
-      return {
-        success: false,
-        error: 'no_code',
-        errorDescription: 'Authorization code is missing',
-      };
-    }
-
-    if (!this.config.clientId || !this.config.clientSecret) {
-      return {
-        success: false,
-        error: 'config_error',
-        errorDescription: 'Client ID and secret are required',
-      };
-    }
-
-    try {
-      // Exchange code for tokens
-      const tokenParams = new URLSearchParams({
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret,
-        code: this.code,
-        grant_type: 'authorization_code',
-      });
-
-      if (this.config.redirectUri) {
-        tokenParams.set('redirect_uri', this.config.redirectUri);
-      }
-
-      const tokenResponse = await fetch(this.providerConfig.tokenUrl, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json', // GitHub requires this
-        },
-        body: tokenParams,
-      });
-
-      const tokens = await tokenResponse.json() as OAuthTokenResponse;
-
-      if (tokens.error) {
-        return {
-          success: false,
-          error: tokens.error,
-          errorDescription: tokens.error_description,
-        };
-      }
-
-      if (!tokens.access_token) {
-        return {
-          success: false,
-          error: 'invalid_response',
-          errorDescription: 'No access token in response',
-        };
-      }
-
-      // Get user info
-      const userResponse = await fetch(this.providerConfig.userInfoUrl, {
-        headers: { 
-          Authorization: `Bearer ${tokens.access_token}`,
-          'User-Agent': '@aid-on/auth', // GitHub requires User-Agent
-        },
-      });
-
-      const user = await userResponse.json() as OAuthUserInfo;
-
-      return {
-        success: true,
-        user,
-        tokens,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: 'exchange_failed',
-        errorDescription: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  }
-
-  /**
-   * Exchange and get user only
-   */
-  async exchangeForUser(): Promise<OAuthUserInfo | null> {
-    const result = await this.exchange();
-    return result.success ? result.user || null : null;
-  }
-}
+// OAuthCallback is in ./oauth-callback.ts
+export { OAuthCallback } from './oauth-callback';

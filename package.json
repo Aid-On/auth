@@ -1,6 +1,6 @@
 {
   "name": "@aid-on/auth",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Edge-native authentication with Fluent API. Sessions, OAuth, Guests, Audit logs. Zero Node.js dependencies.",
   "exports": {
     ".": {
